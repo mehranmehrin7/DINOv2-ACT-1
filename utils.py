@@ -54,11 +54,12 @@ class _SplitTrainDatasetNew(torch.utils.data.Dataset):
     def __getitem__(self, key):
         x,y = self.underlying_dataset[self.keys[key]]
         if self.transform is not None:
-            img_w = self.transform[0](x)
-            img_s = self.transform[1](x)
-            img_s1 = self.transform[1](x)
+            img_original = self.transform[0](x)
+            img_w = self.transform[1](x)
+            img_s = self.transform[2](x)
+            img_s1 = self.transform[3](x)
 
-        return img_w, img_s, img_s1, y
+        return img_original, img_w, img_s, img_s1, y
     def __len__(self):
         return len(self.keys)
     

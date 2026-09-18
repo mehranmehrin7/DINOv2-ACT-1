@@ -55,9 +55,13 @@ def adjust_learning_rate(optimizer, epoch,iter_num,iter_per_epoch=4762,lr=0.001)
 def image_train(resize_size=256, crop_size=224):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                    std=[0.229, 0.224, 0.225])
-    transforms_train = {
-            "train": [None for i in range(2)]
-        }
+    original_transform = transforms.Compose([
+        transforms.Resize((resize_size, resize_size)),
+        transforms.CenterCrop(crop_size),
+        transforms.ToTensor(),
+        normalize
+    ])
+    
     transform_weak = transforms.Compose([
                 transforms.Resize((resize_size, resize_size)),
                 transforms.RandomCrop(crop_size),
@@ -65,19 +69,27 @@ def image_train(resize_size=256, crop_size=224):
                 transforms.ToTensor(),
                 normalize
             ])
-    transform_strong = transforms.Compose([
-                transforms.Resize((resize_size, resize_size)),
-                transforms.RandomCrop(crop_size),
-                transforms.RandomHorizontalFlip(),
-                ImageNetPolicy(),
-                transforms.ToTensor(),
-                normalize
-            ])
-    transforms_train["train"][0] = transform_weak
-    transforms_train["train"][1] = transform_strong
+    transform_strong_1 = transforms.Compose([
+        transforms.Resize((resize_size, resize_size)),
+        transforms.RandomCrop(crop_size),
+        transforms.RandomHorizontalFlip(),
+        ImageNetPolicy(),
+        transforms.ToTensor(),
+        normalize
+    ])
+
+    transform_strong_2 = transforms.Compose([
+        transforms.Resize((resize_size, resize_size)),
+        transforms.RandomCrop(crop_size),
+        transforms.RandomHorizontalFlip(),
+        ImageNetPolicy(),
+        transforms.ToTensor(),
+        normalize
+    ])
     
     
-    return  transforms_train["train"]
+    
+    return [original_transform, transform_weak, transform_strong_1, transform_strong_2]
 
 
 def image_test(resize_size=256, crop_size=224):
@@ -447,7 +459,7 @@ def train_target(args):
         src_netC1.eval()
         src_netC2.eval()
         #dset_loaders["target"] = tqdm(dset_loaders["target"])
-        for step, (inputs_w, inputs_s, inputs_s1, tar_idx) in enumerate(dset_loaders["target"]):
+        for step, (inputs_original, inputs_w, inputs_s, inputs_s1, tar_idx) in enumerate(dset_loaders["target"]):
             netF.train()
             netC1.train()
             netC2.train()
@@ -462,14 +474,14 @@ def train_target(args):
 
             #result
             #adjust_learning_rate(optimizer_c, epoch_num, step, len(dset_loaders["target"]), 0.01)
-                
+            inputs_original = inputs_original.cuda()
             inputs_w = inputs_w.cuda()
             inputs_s = inputs_s.cuda()
             inputs_s1 = inputs_s1.cuda()
             tar_idx = tar_idx.cuda()
 
-            inputs_test = torch.cat([inputs_w, inputs_s, inputs_s1], dim=0)
-            tar_idx = torch.cat([tar_idx, tar_idx, tar_idx], dim=0)
+            inputs_test = torch.cat([inputs_original, inputs_w, inputs_s, inputs_s1], dim=0)
+            tar_idx = torch.cat([tar_idx, tar_idx, tar_idx, tar_idx], dim=0)
 
             
             with torch.no_grad():

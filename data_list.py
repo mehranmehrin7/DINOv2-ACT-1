@@ -108,8 +108,16 @@ class ImageList_idx(torch.utils.data.Dataset):
     def __getitem__(self, index):
         path, target = self.imgs[index]
         img = self.loader(path)
+
         if self.transform is not None:
+            if isinstance(self.transform, list):
+                img_original, img_weak, img_strong_1, img_strong_2 = [
+                    t(img) for t in self.transform
+                ]
+                return img_original, img_weak, img_strong_1, img_strong_2, target
+
             img = self.transform(img)
+
         if self.target_transform is not None:
             target = self.target_transform(target)
 

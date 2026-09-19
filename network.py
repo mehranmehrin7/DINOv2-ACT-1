@@ -252,10 +252,15 @@ class DINOv2_Adapter(nn.Module):
     Replaces ResNet base in ACT.
     Extracts frozen DINOv2 features and adapts them via a lightweight bottleneck.
     """
-    def __init__(self, bottleneck_dim=256):
+    def __init__(self, bottleneck_dim=256, backbone=None):
         super(DINOv2_Adapter, self).__init__()
         # 1. Load frozen DINOv2 backbone
-        self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14')
+        if backbone is None:
+            backbone = torch.hub.load(
+                'facebookresearch/dinov2',
+                'dinov2_vitb14'
+            )
+        self.backbone = backbone
         for p in self.backbone.parameters():
             p.requires_grad = False
         self.backbone.eval()

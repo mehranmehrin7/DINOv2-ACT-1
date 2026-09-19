@@ -329,11 +329,19 @@ def train_target(args):
         netF.in_features = 1000
         src_netF.in_features = 1000
     elif args.net == 'dinov2':
-        netF = network.DINOv2_Adapter(
-            bottleneck_dim=args.bottleneck
+        shared_backbone = torch.hub.load(
+            'facebookresearch/dinov2',
+            'dinov2_vitb14'
         )
+
+        netF = network.DINOv2_Adapter(
+            bottleneck_dim=args.bottleneck,
+            backbone=shared_backbone
+        )
+
         src_netF = network.DINOv2_Adapter(
-            bottleneck_dim=args.bottleneck
+            bottleneck_dim=args.bottleneck,
+            backbone=shared_backbone
         )
     netF = netF.cuda()
     src_netF = src_netF.cuda()
@@ -408,7 +416,10 @@ def train_target(args):
     netC2.load_state_dict(torch.load(args.modelpath))
     src_netC2.load_state_dict(torch.load(args.modelpath))
 
-    param_group_f = list(netF.parameters())
+    param_group_f = [
+        parameter for parameter in netF.parameters()
+        if parameter.requires_grad
+    ]
     param_group_c = list(netC1.parameters()) + list(netC2.parameters())
 
     for k, v in src_netF.named_parameters():

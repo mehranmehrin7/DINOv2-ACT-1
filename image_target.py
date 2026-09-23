@@ -140,7 +140,7 @@ def data_load(args):
         few_shot_idx, val_idx, te_idx = utils.few_shot_val_test_subset(
             targets,
             args.few_shot,
-            val_ratio=0.1,
+            val_ratio=args.val_ratio,
             seed=args.seed
         )
 
@@ -617,7 +617,6 @@ def train_target(args):
 
     args.out_file.write(log_str + '\n')
     args.out_file.flush()
-    print(log_str+'\n')
 
     return netF, netC1, netC2
 
@@ -650,6 +649,7 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=["euclidean", "cosine"])  
     parser.add_argument('--da', type=str, default='uda', choices=['uda', 'pda'])
     parser.add_argument('--few_shot', default=None,type=int, help='adapt for a few images')
+    parser.add_argument('--val_ratio', default=0.1, type=float, help='fraction of remaining target samples used for validation')
     parser.add_argument('--SAM', action='store_true', default=False, help='Use Sharpness aware minimization')
     parser.add_argument('--rho', default=0.05, type=float, help='SAM rho')
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')

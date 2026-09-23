@@ -145,7 +145,12 @@ def data_load(args):
         )
 
         all_idx = set(range(len(target_dataset)))
-        te_idx = sorted(all_idx - set(few_shot_idx))
+        used_idx = set(few_shot_idx) | set(val_idx) | set(te_idx)
+
+        assert used_idx == all_idx
+        assert set(few_shot_idx).isdisjoint(val_idx)
+        assert set(few_shot_idx).isdisjoint(te_idx)
+        assert set(val_idx).isdisjoint(te_idx)
 
         dsets["target"] = utils._SplitTrainDatasetNew(
             target_dataset,
@@ -165,8 +170,10 @@ def data_load(args):
         )
         dsets["test"].transform = image_test()
 
+        assert set(few_shot_idx).isdisjoint(val_idx)
         assert set(few_shot_idx).isdisjoint(te_idx)
-        assert set(few_shot_idx).union(te_idx) == set(
+        assert set(val_idx).isdisjoint(te_idx)
+        assert set(few_shot_idx).union(val_idx).union(te_idx) == set(
             range(len(target_dataset))
         )
 
@@ -604,7 +611,7 @@ def train_target(args):
     print(
         "Final test accuracy: {:.2f}%".format(final_test_acc)
     )
-    
+
     args.out_file.write(log_str + '\n')
     args.out_file.flush()
     print(log_str+'\n')

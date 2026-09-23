@@ -252,6 +252,7 @@ def cal_acc(loader, netF, netC1, netC2, flag=False):
 def test(loader, netF, netC1, netC2, flag=False):
     test_loss = utils.AverageMeter()
     test_acc = utils.AverageMeter()
+    eval_count = len(loader.dataset)
     # no grad
     with torch.no_grad():
         for i,(img, label) in enumerate(loader):
@@ -281,9 +282,9 @@ def test(loader, netF, netC1, netC2, flag=False):
         per_class_acc_avg = per_class_acc.mean()
         aa = [str(np.round(i, 2)) for i in per_class_acc]
         per_class_acc = ' '.join(aa) 
-        return test_loss.avg, per_class_acc_avg, per_class_acc
+        return test_loss.avg, per_class_acc_avg, per_class_acc, eval_count
     else:
-        return test_loss.avg, test_acc.avg
+        return test_loss.avg, test_acc.avg, eval_count
 
 def loss_function_1(netF, netC1, netC2, inputs_test, src_log_output1, src_log_output2, tar_idx):
     gamma = 0.05
@@ -561,18 +562,18 @@ def train_target(args):
             netC2.eval()
             #dset_loaders['test'] = tqdm(dset_loaders['test'])
             if args.dset=='VISDA-C':
-                test_loss, test_acc, per_class_acc = test(dset_loaders['test'], netF, netC1, netC2, True)
-                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_acc, test_loss) + '\n' + str(per_class_acc)
+                test_loss, test_acc, per_class_acc, test_count = test(dset_loaders['test'], netF, netC1, netC2, True)
+                log_str = 'Task: {}, Iter:{}/{}; EvalSamples={}, Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_count, test_acc, test_loss) + '\n' + str(per_class_acc)
 
             else:
-                validation_loss, validation_acc = test(
+                validation_loss, validation_acc, validation_count = test(
                     dset_loaders["validation"],
                     netF,
                     netC1,
                     netC2,
                     False
                 )
-                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, validation_acc, validation_loss)
+                log_str = 'Task: {}, Iter:{}/{}; EvalSamples={}, Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, validation_count, validation_acc, validation_loss)
             accuracy_history.append(validation_acc)   
             if validation_acc >= best_acc:
                 best_acc = validation_acc
@@ -600,7 +601,7 @@ def train_target(args):
     netC1.load_state_dict(best_netC1)
     netC2.load_state_dict(best_netC2)
 
-    final_test_loss, final_test_acc = test(
+    final_test_loss, final_test_acc, final_test_count = test(
         dset_loaders["test"],
         netF,
         netC1,
@@ -609,7 +610,7 @@ def train_target(args):
     )
 
     print(
-        "Final test accuracy: {:.2f}%".format(final_test_acc)
+        "Final test accuracy: {:.2f}% | TestSamples={}".format(final_test_acc, final_test_count)
     )
 
     args.out_file.write(log_str + '\n')

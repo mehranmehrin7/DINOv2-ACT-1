@@ -137,9 +137,11 @@ def data_load(args):
         target_dataset = ImageFolder(args.t_dset_path)
         targets = torch.tensor(target_dataset.targets)
 
-        few_shot_idx = utils.few_shot_subset(
+        few_shot_idx, val_idx, te_idx = utils.few_shot_val_test_subset(
             targets,
-            args.few_shot
+            args.few_shot,
+            val_ratio=0.1,
+            seed=args.seed
         )
 
         all_idx = set(range(len(target_dataset)))
@@ -150,6 +152,12 @@ def data_load(args):
             few_shot_idx
         )
         dsets["target"].transform = image_train()
+
+        dsets["validation"] = utils._SplitTestDataset(
+            target_dataset,
+            val_idx
+        )
+        dsets["validation"].transform = image_test()
 
         dsets["test"] = utils._SplitTestDataset(
             target_dataset,
@@ -190,6 +198,13 @@ def data_load(args):
 
     dset_loaders["target"] = DataLoader(dsets["target"], batch_size=train_bs, shuffle=True, num_workers=num_worker, drop_last=False)
     #dset_loaders["target"] = InfiniteDataLoader(dsets["target"], batch_size=train_bs, num_workers=num_worker)
+    dset_loaders["validation"] = DataLoader(
+        dsets["validation"],
+        batch_size=train_bs * 3,
+        shuffle=False,
+        num_workers=num_worker,
+        drop_last=False
+    )
     dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs*3, shuffle=False, num_workers=num_worker, drop_last=False)
 
     return dset_loaders
@@ -543,11 +558,17 @@ def train_target(args):
                 log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_acc, test_loss) + '\n' + str(per_class_acc)
 
             else:
-                test_loss, test_acc = test(dset_loaders['test'], netF, netC1, netC2, False)
-                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_acc, test_loss)
-            accuracy_history.append(test_acc)   
-            if test_acc >= best_acc:
-                best_acc = test_acc
+                validation_loss, validation_acc = test(
+                    dset_loaders["validation"],
+                    netF,
+                    netC1,
+                    netC2,
+                    False
+                )
+                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, validation_acc, validation_loss)
+            accuracy_history.append(validation_acc)   
+            if validation_acc >= best_acc:
+                best_acc = validation_acc
                 best_epoch = epoch_num
                 print('Save the model with acc:', best_acc)
                 print('Save the model with epoch:', best_epoch)
@@ -568,15 +589,22 @@ def train_target(args):
     torch.save(best_netC1, osp.join(args.output_dir, "target_C1_" + ".pt"))
     torch.save(best_netC2, osp.join(args.output_dir, "target_C2_" + ".pt"))
         
-    average_acc = sum(accuracy_history) / len(accuracy_history)
+    netF.load_state_dict(best_netF)
+    netC1.load_state_dict(best_netC1)
+    netC2.load_state_dict(best_netC2)
 
-    log_str = (
-        'Best Accuracy = {:.2f}%\n'
-        'Average Accuracy = {:.2f}%\n'
-    ).format(
-        best_acc,
-        average_acc,
+    final_test_loss, final_test_acc = test(
+        dset_loaders["test"],
+        netF,
+        netC1,
+        netC2,
+        False
     )
+
+    print(
+        "Final test accuracy: {:.2f}%".format(final_test_acc)
+    )
+    
     args.out_file.write(log_str + '\n')
     args.out_file.flush()
     print(log_str+'\n')

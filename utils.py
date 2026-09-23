@@ -103,6 +103,38 @@ def few_shot_subset(targets,n_shot):
 
     return indices
 
+def few_shot_val_test_subset(targets, n_shot, val_ratio=0.1, seed=0):
+    generator = torch.Generator().manual_seed(seed)
+
+    adaptation_indices = []
+    validation_indices = []
+    test_indices = []
+
+    for class_label in torch.unique(targets):
+        class_indices = torch.where(targets == class_label)[0]
+        shuffled_indices = class_indices[
+            torch.randperm(len(class_indices), generator=generator)
+        ]
+
+        adaptation_indices.extend(
+            shuffled_indices[:n_shot].tolist()
+        )
+
+        remaining_indices = shuffled_indices[n_shot:]
+        validation_count = max(
+            1,
+            int(len(remaining_indices) * val_ratio)
+        )
+
+        validation_indices.extend(
+            remaining_indices[:validation_count].tolist()
+        )
+        test_indices.extend(
+            remaining_indices[validation_count:].tolist()
+        )
+
+    return adaptation_indices, validation_indices, test_indices
+
 def split_dataset(dataset, seed=0, ratio=0.2):
     assert(ratio <= 0.5)
     keys = list(range(len(dataset)))

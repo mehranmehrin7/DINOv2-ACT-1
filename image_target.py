@@ -188,9 +188,11 @@ def data_load(args):
 
         assert train_paths.isdisjoint(test_paths)
 
-        print(f"Few-shot samples: {len(few_shot_idx)}")
-        print(f"Test samples: {len(te_idx)}")
-        print(f"Total samples: {len(target_dataset)}")
+        print("Dataset split summary:")
+        print(f"  Few-shot samples: {len(few_shot_idx)}")
+        print(f"  Validation samples: {len(val_idx)}")
+        print(f"  Test samples: {len(te_idx)}")
+        print(f"  Total samples: {len(target_dataset)}")
         print("Train/test image overlap: 0")
 
     else:

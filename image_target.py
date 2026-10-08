@@ -137,20 +137,13 @@ def data_load(args):
         target_dataset = ImageFolder(args.t_dset_path)
         targets = torch.tensor(target_dataset.targets)
 
-        few_shot_idx, val_idx, te_idx = utils.few_shot_val_test_subset(
+        few_shot_idx = utils.few_shot_subset(
             targets,
-            args.few_shot,
-            val_ratio=args.val_ratio,
-            seed=args.seed
+            args.few_shot
         )
 
         all_idx = set(range(len(target_dataset)))
-        used_idx = set(few_shot_idx) | set(val_idx) | set(te_idx)
-
-        assert used_idx == all_idx
-        assert set(few_shot_idx).isdisjoint(val_idx)
-        assert set(few_shot_idx).isdisjoint(te_idx)
-        assert set(val_idx).isdisjoint(te_idx)
+        te_idx = sorted(all_idx - set(few_shot_idx))
 
         dsets["target"] = utils._SplitTrainDatasetNew(
             target_dataset,
@@ -158,22 +151,14 @@ def data_load(args):
         )
         dsets["target"].transform = image_train()
 
-        dsets["validation"] = utils._SplitTestDataset(
-            target_dataset,
-            val_idx
-        )
-        dsets["validation"].transform = image_test()
-
         dsets["test"] = utils._SplitTestDataset(
             target_dataset,
             te_idx
         )
         dsets["test"].transform = image_test()
 
-        assert set(few_shot_idx).isdisjoint(val_idx)
         assert set(few_shot_idx).isdisjoint(te_idx)
-        assert set(val_idx).isdisjoint(te_idx)
-        assert set(few_shot_idx).union(val_idx).union(te_idx) == set(
+        assert set(few_shot_idx).union(te_idx) == set(
             range(len(target_dataset))
         )
 
@@ -188,11 +173,9 @@ def data_load(args):
 
         assert train_paths.isdisjoint(test_paths)
 
-        print("Dataset split summary:")
-        print(f"  Few-shot samples: {len(few_shot_idx)}")
-        print(f"  Validation samples: {len(val_idx)}")
-        print(f"  Test samples: {len(te_idx)}")
-        print(f"  Total samples: {len(target_dataset)}")
+        print(f"Few-shot samples: {len(few_shot_idx)}")
+        print(f"Test samples: {len(te_idx)}")
+        print(f"Total samples: {len(target_dataset)}")
         print("Train/test image overlap: 0")
 
     else:
@@ -207,13 +190,6 @@ def data_load(args):
 
     dset_loaders["target"] = DataLoader(dsets["target"], batch_size=train_bs, shuffle=True, num_workers=num_worker, drop_last=False)
     #dset_loaders["target"] = InfiniteDataLoader(dsets["target"], batch_size=train_bs, num_workers=num_worker)
-    dset_loaders["validation"] = DataLoader(
-        dsets["validation"],
-        batch_size=train_bs * 3,
-        shuffle=False,
-        num_workers=num_worker,
-        drop_last=False
-    )
     dset_loaders["test"] = DataLoader(dsets["test"], batch_size=train_bs*3, shuffle=False, num_workers=num_worker, drop_last=False)
 
     return dset_loaders
@@ -254,7 +230,6 @@ def cal_acc(loader, netF, netC1, netC2, flag=False):
 def test(loader, netF, netC1, netC2, flag=False):
     test_loss = utils.AverageMeter()
     test_acc = utils.AverageMeter()
-    eval_count = len(loader.dataset)
     # no grad
     with torch.no_grad():
         for i,(img, label) in enumerate(loader):
@@ -284,9 +259,9 @@ def test(loader, netF, netC1, netC2, flag=False):
         per_class_acc_avg = per_class_acc.mean()
         aa = [str(np.round(i, 2)) for i in per_class_acc]
         per_class_acc = ' '.join(aa) 
-        return test_loss.avg, per_class_acc_avg, per_class_acc, eval_count
+        return test_loss.avg, per_class_acc_avg, per_class_acc
     else:
-        return test_loss.avg, test_acc.avg, eval_count
+        return test_loss.avg, test_acc.avg
 
 def loss_function_1(netF, netC1, netC2, inputs_test, src_log_output1, src_log_output2, tar_idx):
     gamma = 0.05
@@ -564,21 +539,15 @@ def train_target(args):
             netC2.eval()
             #dset_loaders['test'] = tqdm(dset_loaders['test'])
             if args.dset=='VISDA-C':
-                test_loss, test_acc, per_class_acc, test_count = test(dset_loaders['test'], netF, netC1, netC2, True)
-                log_str = 'Task: {}, Iter:{}/{}; EvalSamples={}, Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_count, test_acc, test_loss) + '\n' + str(per_class_acc)
+                test_loss, test_acc, per_class_acc = test(dset_loaders['test'], netF, netC1, netC2, True)
+                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_acc, test_loss) + '\n' + str(per_class_acc)
 
             else:
-                validation_loss, validation_acc, validation_count = test(
-                    dset_loaders["validation"],
-                    netF,
-                    netC1,
-                    netC2,
-                    False
-                )
-                log_str = 'Task: {}, Iter:{}/{}; EvalSamples={}, Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, validation_count, validation_acc, validation_loss)
-            accuracy_history.append(validation_acc)   
-            if validation_acc >= best_acc:
-                best_acc = validation_acc
+                test_loss, test_acc = test(dset_loaders['test'], netF, netC1, netC2, False)
+                log_str = 'Task: {}, Iter:{}/{}; Accuracy = {:.2f}%, Loss = {:.4f}'.format(args.name, epoch_num, max_epoch, test_acc, test_loss)
+            accuracy_history.append(test_acc)   
+            if test_acc >= best_acc:
+                best_acc = test_acc
                 best_epoch = epoch_num
                 print('Save the model with acc:', best_acc)
                 print('Save the model with epoch:', best_epoch)
@@ -599,24 +568,18 @@ def train_target(args):
     torch.save(best_netC1, osp.join(args.output_dir, "target_C1_" + ".pt"))
     torch.save(best_netC2, osp.join(args.output_dir, "target_C2_" + ".pt"))
         
-    netF.load_state_dict(best_netF)
-    netC1.load_state_dict(best_netC1)
-    netC2.load_state_dict(best_netC2)
+    average_acc = sum(accuracy_history) / len(accuracy_history)
 
-    final_test_loss, final_test_acc, final_test_count = test(
-        dset_loaders["test"],
-        netF,
-        netC1,
-        netC2,
-        False
+    log_str = (
+        'Best Accuracy = {:.2f}%\n'
+        'Average Accuracy = {:.2f}%\n'
+    ).format(
+        best_acc,
+        average_acc,
     )
-
-    print(
-        "Final test accuracy: {:.2f}% | TestSamples={}".format(final_test_acc, final_test_count)
-    )
-
     args.out_file.write(log_str + '\n')
     args.out_file.flush()
+    print(log_str+'\n')
 
     return netF, netC1, netC2
 
@@ -649,7 +612,6 @@ if __name__ == "__main__":
     parser.add_argument('--distance', type=str, default='cosine', choices=["euclidean", "cosine"])  
     parser.add_argument('--da', type=str, default='uda', choices=['uda', 'pda'])
     parser.add_argument('--few_shot', default=None,type=int, help='adapt for a few images')
-    parser.add_argument('--val_ratio', default=0.1, type=float, help='fraction of remaining target samples used for validation')
     parser.add_argument('--SAM', action='store_true', default=False, help='Use Sharpness aware minimization')
     parser.add_argument('--rho', default=0.05, type=float, help='SAM rho')
     parser.add_argument('--wd', default=0, type=float, help='Weight decay')
